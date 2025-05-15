@@ -1,4 +1,6 @@
 import torch
+
+torch.backends.cudnn.benchmark = True
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
@@ -81,13 +83,19 @@ class PGM_Dataset(Dataset):
 
 # ======== ENTRENAMIENTO ========
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print(f"🔍 Dispositivo en uso: {device}")
 
 model = RCAN().to(device)
 
 dataset = PGM_Dataset("inputs")
-loader = DataLoader(dataset, batch_size=4, shuffle=True)
+loader = DataLoader(
+    dataset,
+    batch_size=8,      # duplicamos el tamaño de lote para usar más VRAM
+    shuffle=True,
+    num_workers=4,     # carga datos en paralelo
+    pin_memory=True    # acelera la transferencia CPU→GPU
+)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
@@ -95,7 +103,8 @@ for epoch in range(50):
     model.train()
     total_loss = 0
     for lr, hr in loader:
-        lr, hr = lr.to(device), hr.to(device)
+        lr = lr.to(device, non_blocking=True)
+        hr = hr.to(device, non_blocking=True)
         sr = model(lr)
         loss = F.mse_loss(sr, hr)
         optimizer.zero_grad()
