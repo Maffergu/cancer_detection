@@ -1,7 +1,5 @@
-# Output Images Fotos
-/imgs
+# Input Images Fotos
 /inputs
-/output
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
