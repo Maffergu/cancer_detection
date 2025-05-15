@@ -1,23 +1,24 @@
 import torch
-
 from torch.cuda.amp import autocast, GradScaler
-
 torch.backends.cudnn.benchmark = True
+
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 import torch.optim as optim
+
 from PIL import Image
 import os
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import numpy as np
-from torch.utils.data import random_split
+
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from skimage.metrics import structural_similarity as compare_ssim
 
-# ======== RCAN DEFINICIÓN ========
+from multiprocessing import freeze_support
 
+# ======== RCAN DEFINICIÓN ========
 class CALayer(nn.Module):
     def __init__(self, channel, reduction=16):
         super(CALayer, self).__init__()
@@ -67,7 +68,6 @@ class RCAN(nn.Module):
         return x
 
 # ======== DATASET .pgm ========
-
 class PGM_Dataset(Dataset):
     def __init__(self, folder, scale=2):
         self.paths = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".pgm")]
@@ -80,89 +80,12 @@ class PGM_Dataset(Dataset):
     def __getitem__(self, idx):
         img = Image.open(self.paths[idx]).convert('L')
         hr = self.to_tensor(img)
-        lr = T.Resize((hr.shape[1] // self.scale, hr.shape[2] // self.scale), interpolation=Image.BICUBIC)(img)
-        lr = self.to_tensor(lr)
+        lr_img = T.Resize((hr.shape[1] // self.scale, hr.shape[2] // self.scale), interpolation=Image.BICUBIC)(img)
+        lr = self.to_tensor(lr_img)
         return lr, hr
 
-# ======== ENTRENAMIENTO ========
-
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print(f"🔍 Dispositivo en uso: {device}, CUDA versión: {torch.version.cuda}")
-
-model = RCAN().to(device)
-
-dataset = PGM_Dataset("inputs")
-num_train = int(len(dataset) * 0.8)
-num_val = len(dataset) - num_train
-train_set, val_set = random_split(dataset, [num_train, num_val])
-
-train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
-val_loader = DataLoader(val_set, batch_size=1, num_workers=2, pin_memory=True)
-
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
-scaler = GradScaler()
-
-best_psnr = 0
-patience = 10
-counter = 0
-
-for epoch in range(50):
-    model.train()
-    total_loss = 0
-    for lr, hr in train_loader:
-        lr, hr = lr.to(device, non_blocking=True), hr.to(device, non_blocking=True)
-        with autocast():
-            sr = model(lr)
-            loss = F.mse_loss(sr, hr)
-        optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        total_loss += loss.item()
-    
-    print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader):.4f}")
-
-    # Validación
-    model.eval()
-    total_psnr = 0
-    with torch.no_grad():
-        for lr_val, hr_val in val_loader:
-            lr_val, hr_val = lr_val.to(device), hr_val.to(device)
-            sr_val = model(lr_val)
-            sr_np = torch.clamp(sr_val.squeeze(), 0, 1).cpu().numpy()
-            hr_np = hr_val.squeeze().cpu().numpy()
-            psnr = compare_psnr(hr_np, sr_np, data_range=1.0)
-            total_psnr += psnr
-    avg_psnr = total_psnr / len(val_loader)
-    print(f"📊 PSNR de validación: {avg_psnr:.2f} dB")
-
-    # Early Stopping
-    if avg_psnr > best_psnr:
-        best_psnr = avg_psnr
-        counter = 0
-        torch.save(model.state_dict(), "mejor_modelo.pth")
-        print("✅ Nuevo mejor modelo guardado.")
-    else:
-        counter += 1
-        print(f"⏳ Sin mejora. Paciencia: {counter}/{patience}")
-        if counter >= patience:
-            print("🛑 Early stopping activado.")
-            break
-
-model.load_state_dict(torch.load("mejor_modelo.pth"))
-model.eval()
-
-
-# ======== VISUALIZAR Y GUARDAR UNA IMAGEN CON PSNR/SSIM ========
-
-# Acumuladores globales para métricas
-metricas_acumuladas = {
-    'total_psnr': 0.0,
-    'total_ssim': 0.0,
-    'n': 0
-}
-
-def mostrar_resultado(modelo, dataset, idx=0, carpeta_output="output", carpeta_imgs="imgs", acumulador=None):
+# ======== VISUALIZACIÓN ========
+def mostrar_resultado(modelo, dataset, device, idx=0, carpeta_output="output", carpeta_imgs="imgs", acumulador=None):
     modelo.eval()
     os.makedirs(carpeta_output, exist_ok=True)
     os.makedirs(carpeta_imgs, exist_ok=True)
@@ -212,14 +135,91 @@ def mostrar_resultado(modelo, dataset, idx=0, carpeta_output="output", carpeta_i
     print(f"📊 Gráfica guardada como '{ruta_guardado}'")
     #plt.show()
 
-# Evaluar todas las imágenes y acumular PSNR/SSIM
-for i in range(len(dataset)):
-    mostrar_resultado(model, dataset, idx=i, acumulador=metricas_acumuladas)
+# ======== EJECUCIÓN PRINCIPAL ========
+def main():
+    # Configuración de dispositivo
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    print(f"🔍 Dispositivo en uso: {device}, CUDA versión: {torch.version.cuda}")
 
-# Promedios finales
-n = metricas_acumuladas['n']
-avg_psnr = metricas_acumuladas['total_psnr'] / n
-avg_ssim = metricas_acumuladas['total_ssim'] / n
+    # Modelo y datos
+    model = RCAN().to(device)
+    dataset = PGM_Dataset("inputs")
+    num_train = int(len(dataset) * 0.8)
+    num_val = len(dataset) - num_train
+    train_set, val_set = random_split(dataset, [num_train, num_val])
 
-print(f"\n📈 PSNR promedio: {avg_psnr:.2f} dB")
-print(f"📈 SSIM promedio: {avg_ssim:.4f}")
+    # DataLoaders
+    train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader   = DataLoader(val_set,   batch_size=1, num_workers=2, pin_memory=True)
+
+    # Optimizador y scaler
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    scaler = GradScaler()
+
+    # Early stopping
+    best_psnr = 0.0
+    patience = 10
+    counter = 0
+
+    # Entrenamiento
+    for epoch in range(100):
+        model.train()
+        total_loss = 0.0
+        for lr, hr in train_loader:
+            lr, hr = lr.to(device, non_blocking=True), hr.to(device, non_blocking=True)
+            with autocast():
+                sr = model(lr)
+                loss = F.mse_loss(sr, hr)
+            optimizer.zero_grad()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            total_loss += loss.item()
+
+        print(f"Epoch {epoch+1}, Loss: {total_loss/len(train_loader):.4f}")
+
+        # Validación
+        model.eval()
+        total_psnr = 0.0
+        with torch.no_grad():
+            for lr_val, hr_val in val_loader:
+                lr_val, hr_val = lr_val.to(device), hr_val.to(device)
+                sr_val = model(lr_val)
+                sr_np = torch.clamp(sr_val.squeeze(), 0, 1).cpu().numpy()
+                hr_np = hr_val.squeeze().cpu().numpy()
+                total_psnr += compare_psnr(hr_np, sr_np, data_range=1.0)
+        avg_psnr = total_psnr / len(val_loader)
+        print(f"📊 PSNR de validación: {avg_psnr:.2f} dB")
+
+        # Early Stopping
+        if avg_psnr > best_psnr:
+            best_psnr = avg_psnr
+            counter = 0
+            torch.save(model.state_dict(), "mejor_modelo.pth")
+            print("✅ Nuevo mejor modelo guardado.")
+        else:
+            counter += 1
+            print(f"⏳ Sin mejora. Paciencia: {counter}/{patience}")
+            if counter >= patience:
+                print("🛑 Early stopping activado.")
+                break
+
+    # Cargar mejor modelo
+    model.load_state_dict(torch.load("mejor_modelo.pth"))
+    model.eval()
+
+    # Evaluación final y guardado de imágenes
+    metricas_acumuladas = {'total_psnr':0.0, 'total_ssim':0.0, 'n':0}
+    for i in range(len(dataset)):
+        mostrar_resultado(model, dataset, device, idx=i, acumulador=metricas_acumuladas)
+
+    # Métricas promedio
+    n = metricas_acumuladas['n']
+    avg_psnr = metricas_acumuladas['total_psnr'] / n
+    avg_ssim = metricas_acumuladas['total_ssim'] / n
+    print(f"\n📈 PSNR promedio: {avg_psnr:.2f} dB")
+    print(f"📈 SSIM promedio: {avg_ssim:.4f}")
+
+if __name__ == "__main__":
+    freeze_support()
+    main()
