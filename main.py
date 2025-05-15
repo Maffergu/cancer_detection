@@ -7,6 +7,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset, random_split
 import torch.optim as optim
 
+import torchvision.transforms.functional as TF
+import random
+from PIL import ImageFilter
+
 from PIL import Image
 import os
 import torchvision.transforms as T
@@ -68,21 +72,55 @@ class RCAN(nn.Module):
         return x
 
 # ======== DATASET .pgm ========
+
+def degradar_realista(img, scale):
+    # 1. Downsample bicubic
+    w, h = img.size
+    img = TF.resize(img, (h // scale, w // scale), interpolation=Image.BICUBIC)
+
+    # 2. Desenfoque leve (opcional)
+    if random.random() < 0.4:
+        radius = random.uniform(0.3, 0.8)
+        img = img.filter(ImageFilter.GaussianBlur(radius))
+
+    # 3. Ruido Poisson
+    if random.random() < 0.7:
+        arr = np.array(img).astype(np.float32) / 255.0  # Normalizar
+        arr_poisson = np.random.poisson(arr * 255) / 255.0  # Escalar, aplicar ruido y renormalizar
+        arr_poisson = np.clip(arr_poisson, 0, 1)
+        img = Image.fromarray((arr_poisson * 255).astype(np.uint8))
+
+    return img
 class PGM_Dataset(Dataset):
-    def __init__(self, folder, scale=2):
+    def __init__(self, folder, scale=2, degradar_fn=None):
         self.paths = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".pgm")]
         self.scale = scale
         self.to_tensor = T.ToTensor()
+        self.degradar = degradar_fn  # puede ser None
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
         img = Image.open(self.paths[idx]).convert('L')
+        W, H = img.size
+
+        new_W = (W // self.scale) * self.scale
+        new_H = (H // self.scale) * self.scale
+        if (new_W, new_H) != (W, H):
+            img = img.crop((0, 0, new_W, new_H))
+
         hr = self.to_tensor(img)
-        lr_img = T.Resize((hr.shape[1] // self.scale, hr.shape[2] // self.scale), interpolation=Image.BICUBIC)(img)
+
+        # degradar si hay función, si no, solo downsample
+        if self.degradar is not None:
+            lr_img = self.degradar(img, self.scale)
+        else:
+            lr_img = TF.resize(img, (new_H // self.scale, new_W // self.scale), interpolation=Image.BICUBIC)
+
         lr = self.to_tensor(lr_img)
         return lr, hr
+
 
 # ======== VISUALIZACIÓN ========
 def mostrar_resultado(modelo, dataset, device, idx=0, carpeta_output="output", carpeta_imgs="imgs", acumulador=None):
@@ -135,22 +173,38 @@ def mostrar_resultado(modelo, dataset, device, idx=0, carpeta_output="output", c
     print(f"📊 Gráfica guardada como '{ruta_guardado}'")
     #plt.show()
 
-# ======== EJECUCIÓN PRINCIPAL ========
 def main():
     # Configuración de dispositivo
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f"🔍 Dispositivo en uso: {device}, CUDA versión: {torch.version.cuda}")
 
-    # Modelo y datos
+    # Modelo
     model = RCAN().to(device)
-    dataset = PGM_Dataset("inputs")
-    num_train = int(len(dataset) * 0.8)
-    num_val = len(dataset) - num_train
-    train_set, val_set = random_split(dataset, [num_train, num_val])
 
-    # DataLoaders
-    train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader   = DataLoader(val_set,   batch_size=1, num_workers=2, pin_memory=True)
+    # === Paso 2: Separar rutas y crear datasets diferenciados ===
+    all_paths = sorted([
+        os.path.join("inputs", f)
+        for f in os.listdir("inputs")
+        if f.endswith(".pgm")
+    ])
+    num_total = len(all_paths)
+    num_train = int(num_total * 0.8)
+    num_val = num_total - num_train
+
+    train_paths = all_paths[:num_train]
+    val_paths   = all_paths[num_train:]
+
+    # Dataset de entrenamiento con degradación
+    train_dataset = PGM_Dataset("inputs", scale=2, degradar_fn=degradar_realista)
+    train_dataset.paths = train_paths
+
+    # Dataset de validación sin degradación
+    val_dataset = PGM_Dataset("inputs", scale=2, degradar_fn=None)
+    val_dataset.paths = val_paths
+
+    # === Paso 3: Loaders ===
+    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader   = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2, pin_memory=True)
 
     # Optimizador y scaler
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -162,7 +216,7 @@ def main():
     counter = 0
 
     # Entrenamiento
-    for epoch in range(100):
+    for epoch in range(50):
         model.train()
         total_loss = 0.0
         for lr, hr in train_loader:
@@ -208,10 +262,10 @@ def main():
     model.load_state_dict(torch.load("mejor_modelo.pth"))
     model.eval()
 
-    # Evaluación final y guardado de imágenes
-    metricas_acumuladas = {'total_psnr':0.0, 'total_ssim':0.0, 'n':0}
-    for i in range(len(dataset)):
-        mostrar_resultado(model, dataset, device, idx=i, acumulador=metricas_acumuladas)
+    # Evaluación final y guardado de imágenes sobre val_dataset (no todo el dataset)
+    metricas_acumuladas = {'total_psnr': 0.0, 'total_ssim': 0.0, 'n': 0}
+    for i in range(len(val_dataset)):
+        mostrar_resultado(model, val_dataset, device, idx=i, acumulador=metricas_acumuladas)
 
     # Métricas promedio
     n = metricas_acumuladas['n']
