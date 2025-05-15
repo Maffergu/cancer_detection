@@ -1,5 +1,7 @@
 import torch
 
+from torch.cuda.amp import autocast, GradScaler
+
 torch.backends.cudnn.benchmark = True
 import torch.nn as nn
 import torch.nn.functional as F
@@ -85,7 +87,7 @@ class PGM_Dataset(Dataset):
 # ======== ENTRENAMIENTO ========
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print(f"🔍 Dispositivo en uso: {device}")
+print(f"🔍 Dispositivo en uso: {device}, CUDA versión: {torch.version.cuda}")
 
 model = RCAN().to(device)
 
@@ -94,10 +96,11 @@ num_train = int(len(dataset) * 0.8)
 num_val = len(dataset) - num_train
 train_set, val_set = random_split(dataset, [num_train, num_val])
 
-train_loader = DataLoader(train_set, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_set, batch_size=1)
+train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
+val_loader = DataLoader(val_set, batch_size=1, num_workers=2, pin_memory=True)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
+scaler = GradScaler()
 
 best_psnr = 0
 patience = 10
@@ -107,12 +110,14 @@ for epoch in range(50):
     model.train()
     total_loss = 0
     for lr, hr in train_loader:
-        lr, hr = lr.to(device), hr.to(device)
-        sr = model(lr)
-        loss = F.mse_loss(sr, hr)
+        lr, hr = lr.to(device, non_blocking=True), hr.to(device, non_blocking=True)
+        with autocast():
+            sr = model(lr)
+            loss = F.mse_loss(sr, hr)
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         total_loss += loss.item()
     
     print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader):.4f}")
