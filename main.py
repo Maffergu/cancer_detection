@@ -1,4 +1,6 @@
 import torch
+
+torch.backends.cudnn.benchmark = True
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
@@ -82,7 +84,7 @@ class PGM_Dataset(Dataset):
 
 # ======== ENTRENAMIENTO ========
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print(f"🔍 Dispositivo en uso: {device}")
 
 model = RCAN().to(device)
