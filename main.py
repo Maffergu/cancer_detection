@@ -10,7 +10,7 @@ import torch.optim as optim
 from PIL import Image
 import os
 import torchvision.transforms as T
-from torchvision.transforms import RandomCrop
+from torchvision.transforms import GaussianBlur, RandomRotation, ColorJitter, RandomChoice
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -43,14 +43,15 @@ class RCAB(nn.Module):
             nn.Conv2d(channel, channel, 3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(channel, channel, 3, padding=1),
-            CALayer(channel)
+            CALayer(channel),
+            nn.Dropout2d(0.1)
         )
 
     def forward(self, x):
         return self.body(x) + x
 
 class RCAN(nn.Module):
-    def __init__(self, num_blocks=10, channel=64, scale=2):
+    def __init__(self, num_blocks=8, channel=48, scale=2):
         super(RCAN, self).__init__()
         self.scale = scale
         self.head = nn.Conv2d(1, channel, 3, padding=1)
@@ -77,7 +78,15 @@ class PGM_Dataset(Dataset):
         self.patch_size = patch_size
         self.augment = T.Compose([
             T.RandomHorizontalFlip(),
-            T.RandomVerticalFlip()
+            T.RandomVerticalFlip(),
+            T.RandomChoice([
+                T.RandomRotation((0, 0)),
+                T.RandomRotation((90, 90)),
+                T.RandomRotation((180, 180)),
+                T.RandomRotation((270, 270))
+            ]),
+            T.ColorJitter(brightness=0.2, contrast=0.2),
+            T.GaussianBlur(kernel_size=3)
         ])
         self.to_tensor = T.ToTensor()
 
@@ -87,7 +96,7 @@ class PGM_Dataset(Dataset):
     def __getitem__(self, idx):
         img = Image.open(self.paths[idx]).convert('L')
         # random crop on HR
-        hr_patch = RandomCrop((self.patch_size * self.scale, self.patch_size * self.scale))(img)
+        hr_patch = T.RandomCrop((self.patch_size * self.scale, self.patch_size * self.scale))(img)
         # data augmentation
         hr_patch = self.augment(hr_patch)
         hr = self.to_tensor(hr_patch)
@@ -149,7 +158,7 @@ def main():
 
     input_folder = "inputs"
     patch_size = 64
-    scales = [2, 3, 4]
+    scales = [2, 4]
 
     for scale in scales:
         print(f"\n=== Entrenando y evaluando modelo x{scale} ===")
@@ -162,10 +171,10 @@ def main():
         train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4, pin_memory=True)
         val_loader   = DataLoader(val_set,   batch_size=1, num_workers=2, pin_memory=True)
 
-        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
         scaler = GradScaler()
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='max', factor=0.5, patience=5, verbose=True
+            optimizer, mode='max', factor=0.5, patience=8, verbose=True
         )
 
         best_psnr = 0.0

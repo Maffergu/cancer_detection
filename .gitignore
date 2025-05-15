@@ -177,3 +177,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+imgs_x2/
+imgs_x3/
+imgs_x4/
+output_x2/
+output_x3/
+output_x4/
