@@ -8,6 +8,7 @@ import os
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import numpy as np
+from torch.utils.data import random_split
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from skimage.metrics import structural_similarity as compare_ssim
 
@@ -87,14 +88,23 @@ print(f"🔍 Dispositivo en uso: {device}")
 model = RCAN().to(device)
 
 dataset = PGM_Dataset("inputs")
-loader = DataLoader(dataset, batch_size=4, shuffle=True)
+num_train = int(len(dataset) * 0.8)
+num_val = len(dataset) - num_train
+train_set, val_set = random_split(dataset, [num_train, num_val])
+
+train_loader = DataLoader(train_set, batch_size=4, shuffle=True)
+val_loader = DataLoader(val_set, batch_size=1)
 
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+best_psnr = 0
+patience = 10
+counter = 0
 
 for epoch in range(50):
     model.train()
     total_loss = 0
-    for lr, hr in loader:
+    for lr, hr in train_loader:
         lr, hr = lr.to(device), hr.to(device)
         sr = model(lr)
         loss = F.mse_loss(sr, hr)
@@ -102,7 +112,39 @@ for epoch in range(50):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-    print(f"Epoch {epoch+1}, Loss: {total_loss / len(loader):.4f}")
+    
+    print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader):.4f}")
+
+    # Validación
+    model.eval()
+    total_psnr = 0
+    with torch.no_grad():
+        for lr_val, hr_val in val_loader:
+            lr_val, hr_val = lr_val.to(device), hr_val.to(device)
+            sr_val = model(lr_val)
+            sr_np = torch.clamp(sr_val.squeeze(), 0, 1).cpu().numpy()
+            hr_np = hr_val.squeeze().cpu().numpy()
+            psnr = compare_psnr(hr_np, sr_np, data_range=1.0)
+            total_psnr += psnr
+    avg_psnr = total_psnr / len(val_loader)
+    print(f"📊 PSNR de validación: {avg_psnr:.2f} dB")
+
+    # Early Stopping
+    if avg_psnr > best_psnr:
+        best_psnr = avg_psnr
+        counter = 0
+        torch.save(model.state_dict(), "mejor_modelo.pth")
+        print("✅ Nuevo mejor modelo guardado.")
+    else:
+        counter += 1
+        print(f"⏳ Sin mejora. Paciencia: {counter}/{patience}")
+        if counter >= patience:
+            print("🛑 Early stopping activado.")
+            break
+
+model.load_state_dict(torch.load("mejor_modelo.pth"))
+model.eval()
+
 
 # ======== VISUALIZAR Y GUARDAR UNA IMAGEN CON PSNR/SSIM ========
 
