@@ -1,3 +1,4 @@
+import time
 import torch
 from torch.cuda.amp import autocast, GradScaler
 torch.backends.cudnn.benchmark = True
@@ -51,7 +52,7 @@ class RCAB(nn.Module):
         return self.body(x) + x
 
 class RCAN(nn.Module):
-    def __init__(self, num_blocks=8, channel=48, scale=2):
+    def __init__(self, num_blocks=16, channel=64, scale=2):
         super(RCAN, self).__init__()
         self.scale = scale
         self.head = nn.Conv2d(1, channel, 3, padding=1)
@@ -72,37 +73,54 @@ class RCAN(nn.Module):
 
 # ======== DATASET .pgm ========
 class PGM_Dataset(Dataset):
-    def __init__(self, folder, scale=2, patch_size=64):
+    def __init__(self, folder, scale=2, apply_degradation=True):
         self.paths = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".pgm")]
         self.scale = scale
-        self.patch_size = patch_size
-        self.augment = T.Compose([
-            T.RandomHorizontalFlip(),
-            T.RandomVerticalFlip(),
-            T.RandomChoice([
-                T.RandomRotation((0, 0)),
-                T.RandomRotation((90, 90)),
-                T.RandomRotation((180, 180)),
-                T.RandomRotation((270, 270))
-            ]),
-            T.ColorJitter(brightness=0.2, contrast=0.2),
-            T.GaussianBlur(kernel_size=3)
-        ])
         self.to_tensor = T.ToTensor()
+        self.apply_degradation = apply_degradation
+
+    def degradar(self, img_tensor):
+        # Ruido gaussiano ligero
+        if torch.rand(1).item() < 0.5:
+            noise = torch.randn_like(img_tensor) * 0.02
+            img_tensor = img_tensor + noise
+
+        # Desenfoque gaussiano
+        if torch.rand(1).item() < 0.5:
+            kernel_size = 3 if torch.rand(1).item() < 0.5 else 5
+            img_tensor = T.GaussianBlur(kernel_size=kernel_size)(img_tensor)
+
+        # Pixelación extra fuerte (reduce, luego upsample nearest)
+        if torch.rand(1).item() < 0.7:
+            c, h, w = img_tensor.shape
+            factor = 2  # cómo de fuerte es la pixelación: más = más bloques
+            img_small = F.interpolate(img_tensor.unsqueeze(0), size=(h//factor, w//factor), mode='nearest')
+            img_tensor = F.interpolate(img_small, size=(h, w), mode='nearest').squeeze(0)
+
+        img_tensor = torch.clamp(img_tensor, 0.0, 1.0)
+        return img_tensor
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
         img = Image.open(self.paths[idx]).convert('L')
-        # random crop on HR
-        hr_patch = T.RandomCrop((self.patch_size * self.scale, self.patch_size * self.scale))(img)
-        # data augmentation
-        hr_patch = self.augment(hr_patch)
-        hr = self.to_tensor(hr_patch)
-        # generate LR patch by downsampling
-        lr_img = hr_patch.resize((self.patch_size, self.patch_size), Image.BICUBIC)
+        W, H = img.size
+        new_W = (W // self.scale) * self.scale
+        new_H = (H // self.scale) * self.scale
+        if (W, H) != (new_W, new_H):
+            img = img.crop((0, 0, new_W, new_H))
+
+        # HR como tensor
+        hr = self.to_tensor(img)
+
+        # LR generado con downscale + degradación
+        lr_img = img.resize((new_W // self.scale, new_H // self.scale), Image.BICUBIC)
         lr = self.to_tensor(lr_img)
+
+        if self.apply_degradation:
+            lr = self.degradar(lr)
+
         return lr, hr
 
 # ======== VISUALIZACIÓN ========
@@ -157,14 +175,13 @@ def main():
     print(f"🔍 Dispositivo en uso: {device}, CUDA versión: {torch.version.cuda}")
 
     input_folder = "inputs"
-    patch_size = 64
-    scales = [2, 4]
+    scales = [2]
 
     for scale in scales:
         print(f"\n=== Entrenando y evaluando modelo x{scale} ===")
         # Datos y modelo
         model = RCAN(scale=scale).to(device)
-        dataset = PGM_Dataset(input_folder, scale=scale, patch_size=patch_size)
+        dataset = PGM_Dataset(input_folder, scale=scale)
         num_train = int(len(dataset) * 0.8)
         train_set, val_set = random_split(dataset, [num_train, len(dataset)-num_train])
 
@@ -172,17 +189,19 @@ def main():
         val_loader   = DataLoader(val_set,   batch_size=1, num_workers=2, pin_memory=True)
 
         optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
-        scaler = GradScaler()
+        #scaler = GradScaler()
+        scaler = torch.amp.GradScaler('cuda')
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='max', factor=0.5, patience=8, verbose=True
         )
 
         best_psnr = 0.0
-        patience = 10
+        patience = 20
         counter = 0
 
         # Entrenamiento
-        for epoch in range(100):
+        start_time = time.time()
+        for epoch in range(200):
             model.train()
             total_loss = 0.0
             for lr_batch, hr_batch in train_loader:
@@ -225,7 +244,11 @@ def main():
                 if counter >= patience:
                     print(f"Scale x{scale} | 🛑 Early stopping activado.")
                     break
-
+        
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        minutos, segundos = divmod(elapsed_time, 60)
+        print(f"\n⏱️ Tiempo de entrenamiento total: {int(minutos)} minutos y {int(segundos)} segundos.")
         # Cargar y evaluar mejor modelo
         model.load_state_dict(torch.load(f"mejor_modelo_x{scale}.pth"))
         metricas = {'total_psnr':0.0, 'total_ssim':0.0, 'n':0}
@@ -239,6 +262,7 @@ def main():
         n = metricas['n']
         print(f"\nScale x{scale} | 📈 PSNR promedio: {metricas['total_psnr']/n:.2f} dB")
         print(f"Scale x{scale} | 📈 SSIM promedio: {metricas['total_ssim']/n:.4f}")
+        
 
 if __name__ == "__main__":
     freeze_support()
