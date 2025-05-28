@@ -10,12 +10,14 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const handleFileChange = e => {
     const file = e.target.files[0];
     if (!file) return;
 
     setUploadedFile(file);
+    setLoadingPreview(true);
 
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
@@ -29,8 +31,12 @@ export default function App() {
     };
   }, [previewUrl]);
 
-  
-  
+  const handleImageLoad = () => {
+   setTimeout(() => {
+     setLoadingPreview(false);
+   }, 1000);
+ };
+
   
   const handleProcessClick = () => {
     // Aquí enviar `uploadedFile` al backend cuando esté listo
@@ -56,16 +62,23 @@ export default function App() {
 
         <div className="instructions">
           <ol>
-            <li>Upload image</li>
+            <li>Upload image (.png / .jpg)</li>
             <li>Click “process image”</li>
             <li>Get results</li>
           </ol>
         </div>
 
         <div className="actions">
-          <button className="upload-btn" onClick={handleUploadClick}>
+          <div className="btn-with-tooltip">
+          <button 
+            className="upload-btn" 
+            onClick={handleUploadClick} 
+            aria-label="Select a .png/.jpg/.jpeg from your device"
+          >
             <img src="/images/upload-icon.png" alt="Upload image" />
           </button>
+          <span className="tooltip">Upload an image</span>
+          </div>
           <input
             type="file"
             accept=".png,.jpg,.jpeg"
@@ -73,11 +86,15 @@ export default function App() {
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
+          <div className="btn-with-tooltip">
           <button className="process-btn"
             onClick={handleProcessClick}
+            aria-label="Proceess the uploaded image"
             disabled={!uploadedFile}>
             <img src="/images/process-icon.png" alt="Process image" />
             </button>
+            <span className="tooltip">Process image</span>
+            </div>
         </div>
       </div>
 
@@ -88,11 +105,20 @@ export default function App() {
             <div className="image-container">
               <div className="label">ORIGINAL</div>
              <div
-         className="image-box"
-         onClick={() => previewUrl && setIsModalOpen(true)}
-         style={{ cursor: previewUrl ? 'zoom-in' : 'default' }}
-       >
-        {previewUrl && <img src={previewUrl} alt="Original" />}
+                className="image-box"
+                onClick={() => previewUrl && setIsModalOpen(true)}
+                style={{ cursor: previewUrl ? 'zoom-in' : 'default' }}
+              >
+        {loadingPreview && (
+                  <div className="spinner" />
+                )}
+                {previewUrl && (
+                  <img
+                    src={previewUrl}
+                    alt="Original Preview"
+                    onLoad={handleImageLoad}
+                  />
+                )}
       </div>
             </div>
             {/* MODAL + ZOOM */}

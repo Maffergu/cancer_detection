@@ -39,7 +39,7 @@ body, #root {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: var(--header-bg-hex);
+  background-image: url("/public/images/b3.jpg");
 }
 
 /* === HEADER  === */
@@ -79,18 +79,60 @@ body, #root {
   background: var(--accent-hex);
   color: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: 
+    transform 0.15s ease-in-out,
+    background-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+}
+
+.upload-btn:hover,
+.process-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.upload-btn:active,
+.process-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.upload-btn:hover {
+  background-color: #e60073;  /* un rosa más intenso */
+}
+
+.process-btn:hover:not(:disabled) {
+  background-color: #bbb;     /* ligero más oscuro */
 }
 
 .process-btn {
   background: var(--accent-hex);
-  color: #333;
+  color: #fff;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: 
+    transform 0.15s ease-in-out,
+    background-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
 }
 .process-btn:disabled {
   background: #eee;
   color: #888;
   cursor: not-allowed;
+  box-shadow: none;
+}
+.process-btn:not(:disabled):hover {
+  background: var(--accent-hex);
+  background-color: #e60073;
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.process-btn:not(:disabled):active {
+  background: var(--accent-hex);
+  background-color: #e60073;
+  transform: scale(0.95);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .process-btn img {
@@ -131,6 +173,31 @@ body, #root {
   cursor: pointer;
 }
 
+.btn-with-tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.btn-with-tooltip .tooltip {
+  position: absolute;
+  bottom: 100%;   /* sit above the button */
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.btn-with-tooltip:hover .tooltip {
+  opacity: 1;
+}
+
 .image-box {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -141,6 +208,24 @@ body, #root {
   overflow: hidden;
   position: relative;
   margin-bottom: 35px;
+}
+
+.spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;  /* centrar */
+  border: 4px solid rgba(0,0,0,0.1);
+  border-top: 4px solid var(--accent-hex);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  z-index: 10;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .image-box img {
