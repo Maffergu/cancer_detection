@@ -1,38 +1,254 @@
-.App {
-  text-align: center;
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+
+:root {
+  --bg-hex: #ffe2f2;
+  --header-bg-hex: #ff94cf;
+  --accent-hex: #FF007F;
+  --section-bg: #FFFFFF;
+  --section-padding: 24px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 16px;
 }
 
-.App-header {
-  background-color: #282c34;
+.content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  margin: 0 24px;
+  overflow: hidden;
+}
+
+.banner,
+.footer-accent {
+  flex: 0 0 auto;
+  margin: 0 24px;  
+}
+
+body, #root {
+  margin: 0;
+  padding: 0;
   min-height: 100vh;
+  background: var(--header-bg-hex);
+}
+
+/* === HEADER  === */
+.banner {
+  display: flex;
+  align-items: center;
+  background: var( --bg-hex);
+  border-left: 15px solid var(--accent-hex);
+  border-right: 15px solid var(--accent-hex);
+  border-bottom: 15px solid var(--accent-hex);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 16px 32px;
+  margin: 0 24px 16px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.banner .instructions {
+  font-size: 0.9rem;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.banner .actions button {
+  margin-left: 12px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.upload-btn {
+  background: var(--accent-hex);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.process-btn {
+  background: var(--accent-hex);
+  color: #333;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.process-btn:disabled {
+  background: #eee;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.process-btn img {
+  width: 2em;
+  height: 2em;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.upload-btn img {
+  width: 2em;
+  height: 2em;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.zoom-modal {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.tools {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.tools button {
+  background: rgba(255,255,255,0.8);
+  border: none;
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.image-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #f5f5f5;
+  border: 8px solid var(--section-bg);
+  box-shadow: 0 0 0 8px var(--accent-hex);
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 35px;
+}
+
+.image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* === SECCIÓN 1 (ORIGINAL / SUPER RES) === */
+
+.section1 {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* centra verticalmente .images-row */
+  align-items: stretch;    /* mantiene el ancho de .images-row completo */
+  background: var(--bg-hex);
+  border-radius: 16px;
+  padding: var(--section-padding);
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+
+.section1 .section-title {
+  margin: 0 0 16px;
+}
+
+.images-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.image-container {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.image-container .label {
+  margin-bottom: 30px;
+  margin-top: 15px;
+  font-weight: bold;
+  text-align: center;
+}
+.image-container .image-box {
+  width: 50%;
+  height: var(--image-size);
+  background: #f5f5f5;
+  border: 16px solid var(--header-bg-hex);
+  box-shadow:
+    0 0 0 1px var(--header-bg-hex),
+    0 0 0 17.5px var(--accent-hex),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.image-container .image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;    
+  object-position: 50% 50%;
+  display: block;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Iconos de zoom */
+.image-container .zoom {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+/* === CLASIFICACIÓN === */
+.classification {
+  position: absolute;
+  bottom: var(--section-padding);
+  left: var(--section-padding);
+  font-weight: bold;
+}
+
+/* === FOOTER  === */
+.footer-accent {
+  flex: 0 0 auto;
+  position: relative;
+  margin: 16px 24px 0 24px; 
+  background: var( --bg-hex);
+  border-left: 15px solid var(--accent-hex);
+  border-right: 15px solid var(--accent-hex);
+  border-top: 15px solid var(--accent-hex);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  height: 130px;
+  padding: 16px 32px;
+  box-sizing: border-box;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.footer-accent .classification {
+  position: absolute;
+  top: var(--section-padding);
+  left: var(--section-padding);
+  font-weight: bold;
 }
