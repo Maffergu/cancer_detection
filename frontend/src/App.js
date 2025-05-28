@@ -11,19 +11,16 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Cuando el usuario selecciona un archivo:
   const handleFileChange = e => {
     const file = e.target.files[0];
     if (!file) return;
 
     setUploadedFile(file);
 
-    // Crear URL para previsualizar
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
   };
 
-  // Limpiar el object URL al cambiar de archivo o al desmontar
   useEffect(() => {
     return () => {
       if (previewUrl) {
@@ -32,10 +29,17 @@ export default function App() {
     };
   }, [previewUrl]);
 
+  
+  
+  
   const handleProcessClick = () => {
-    // Aquí enviarás `uploadedFile` al backend cuando esté listo
+    // Aquí enviar `uploadedFile` al backend cuando esté listo
     console.log('Procesando:', uploadedFile);
   };
+
+
+
+
 
   const handleUploadClick = () => {
     fileInputRef.current.click();
@@ -147,7 +151,7 @@ export default function App() {
         </section>
       </main>
 
-      {/* PIE DE PÁGINA ACENTUADO */}
+      {/* FOOTER */}
       <div className="footer-accent">
         <div className="classification">
           CLASIFICACIÓN Y PRECISIÓN:
