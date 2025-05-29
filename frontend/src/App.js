@@ -37,10 +37,41 @@ export default function App() {
    }, 1000);
  };
 
-  
-  const handleProcessClick = () => {
-    // Aquí enviar `uploadedFile` al backend cuando esté listo
-    console.log('Procesando:', uploadedFile);
+  const [resultImage, setResultImage] = useState(null);
+  const [classification, setClassification] = useState(null);
+  const [processing, setProcessing] = useState(false); 
+
+  const handleProcessClick = async () => {
+    if (!uploadedFile) return;
+
+    setProcessing(true);
+
+    const formData = new FormData();
+    formData.append("file", uploadedFile);
+
+    try {
+      const response = await fetch("http://localhost:8000/process-image/", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setResultImage("http://localhost:8000" + data.image_url);
+        setClassification({
+          class: data.class,
+          confidence: data.confidence
+        });
+      } else {
+        alert("Error al procesar la imagen: " + data.error);
+      }
+    } catch (error) {
+      console.error("Error de red:", error);
+      alert("Error de red");
+    }
+
+    setProcessing(false);
   };
 
 
@@ -170,7 +201,10 @@ export default function App() {
             <div className="image-container">
               <div className="label">SUPER RESOLUCIÓN</div>
               <div className="image-box">
-                <div className="zoom">…</div>
+                {processing && <div className="spinner" />}
+                {!processing && resultImage && (
+                  <img src={resultImage} alt="Resultado SR" />
+                )}
               </div>
             </div>
           </div>
@@ -183,7 +217,14 @@ export default function App() {
           CLASIFICACIÓN Y PRECISIÓN:
         </div>
         <div className="resultado">
-          "result"
+          {classification ? (
+            <>
+              <strong>{classification.class}</strong><br />
+              Precisión: {(classification.confidence * 100).toFixed(2)}%
+            </>
+          ) : (
+            "Sin resultados"
+          )}
         </div>
       </div>
     </div>
