@@ -236,6 +236,15 @@ body, #root {
   display: block;
 }
 
+.resultado{
+  font-size: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
 /* === SECCIÓN 1 (ORIGINAL / SUPER RES) === */
 
 .section1 {
@@ -272,6 +281,7 @@ body, #root {
   margin-bottom: 30px;
   margin-top: 15px;
   font-weight: bold;
+  font-size: 1.5rem;
   text-align: center;
 }
 .image-container .image-box {
@@ -336,4 +346,5 @@ body, #root {
   top: var(--section-padding);
   left: var(--section-padding);
   font-weight: bold;
+  font-size: 1.2rem;
 }

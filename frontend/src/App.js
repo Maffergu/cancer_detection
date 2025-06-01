@@ -1,9 +1,9 @@
-import './App.css';
-import { useState, useRef, useEffect } from 'react';
-import Modal from 'react-modal';
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import "./App.css";
+import { useState, useRef, useEffect } from "react";
+import Modal from "react-modal";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
-Modal.setAppElement('#root');
+Modal.setAppElement("#root");
 
 export default function App() {
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -12,7 +12,11 @@ export default function App() {
   const fileInputRef = useRef(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
-  const handleFileChange = e => {
+  const [isSRModalOpen, setIsSRModalOpen] = useState(false);
+  const [srImageLoaded, setSrImageLoaded] = useState(false);
+  const [previewImageLoaded, setPreviewImageLoaded] = useState(false);
+
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -32,14 +36,14 @@ export default function App() {
   }, [previewUrl]);
 
   const handleImageLoad = () => {
-   setTimeout(() => {
-     setLoadingPreview(false);
-   }, 1000);
- };
+    setTimeout(() => {
+      setLoadingPreview(false);
+    }, 1000);
+  };
 
   const [resultImage, setResultImage] = useState(null);
   const [classification, setClassification] = useState(null);
-  const [processing, setProcessing] = useState(false); 
+  const [processing, setProcessing] = useState(false);
 
   const handleProcessClick = async () => {
     if (!uploadedFile) return;
@@ -52,7 +56,7 @@ export default function App() {
     try {
       const response = await fetch("http://localhost:8000/process-image/", {
         method: "POST",
-        body: formData
+        body: formData,
       });
 
       const data = await response.json();
@@ -61,7 +65,7 @@ export default function App() {
         setResultImage("http://localhost:8000" + data.image_url);
         setClassification({
           class: data.class,
-          confidence: data.confidence
+          confidence: data.confidence,
         });
       } else {
         alert("Error al procesar la imagen: " + data.error);
@@ -74,14 +78,9 @@ export default function App() {
     setProcessing(false);
   };
 
-
-
-
-
   const handleUploadClick = () => {
     fileInputRef.current.click();
   };
-
 
   return (
     <div className="app">
@@ -101,31 +100,33 @@ export default function App() {
 
         <div className="actions">
           <div className="btn-with-tooltip">
-          <button 
-            className="upload-btn" 
-            onClick={handleUploadClick} 
-            aria-label="Select a .png/.jpg/.jpeg from your device"
-          >
-            <img src="/images/upload-icon.png" alt="Upload image" />
-          </button>
-          <span className="tooltip">Upload an image</span>
+            <button
+              className="upload-btn"
+              onClick={handleUploadClick}
+              aria-label="Select a .png/.jpg/.jpeg from your device"
+            >
+              <img src="/images/upload-icon.png" alt="Upload image" />
+            </button>
+            <span className="tooltip">Upload an image</span>
           </div>
           <input
             type="file"
             accept=".png,.jpg,.jpeg"
             ref={fileInputRef}
-            style={{ display: 'none' }}
+            style={{ display: "none" }}
             onChange={handleFileChange}
           />
           <div className="btn-with-tooltip">
-          <button className="process-btn"
-            onClick={handleProcessClick}
-            aria-label="Proceess the uploaded image"
-            disabled={!uploadedFile}>
-            <img src="/images/process-icon.png" alt="Process image" />
+            <button
+              className="process-btn"
+              onClick={handleProcessClick}
+              aria-label="Proceess the uploaded image"
+              disabled={!uploadedFile}
+            >
+              <img src="/images/process-icon.png" alt="Process image" />
             </button>
             <span className="tooltip">Process image</span>
-            </div>
+          </div>
         </div>
       </div>
 
@@ -135,91 +136,131 @@ export default function App() {
             {/* ORIGINAL */}
             <div className="image-container">
               <div className="label">ORIGINAL</div>
-             <div
+              <div
                 className="image-box"
-                onClick={() => previewUrl && setIsModalOpen(true)}
-                style={{ cursor: previewUrl ? 'zoom-in' : 'default' }}
+                onClick={() =>
+                  previewUrl && previewImageLoaded && setIsModalOpen(true)
+                }
+                style={{
+                  cursor:
+                    previewUrl && previewImageLoaded ? "zoom-in" : "default",
+                }}
               >
-        {loadingPreview && (
-                  <div className="spinner" />
-                )}
+                {loadingPreview && <div className="spinner" />}
                 {previewUrl && (
                   <img
                     src={previewUrl}
                     alt="Original Preview"
-                    onLoad={handleImageLoad}
+                    onLoad={() => {
+                      handleImageLoad();
+                      setPreviewImageLoaded(true);
+                    }}
                   />
-                )}
-      </div>
-            </div>
-            {/* MODAL + ZOOM */}
-     {previewUrl && (
-       <Modal
-         isOpen={isModalOpen}
-         onRequestClose={() => setIsModalOpen(false)}
-         style={{
-           overlay: { backgroundColor: 'rgba(0,0,0,0.75)' },
-           content: {
-             inset: '5%',
-             padding: 0,
-             border: 'none',
-             background: 'transparent'
-           }
-         }}
-       >
-         <TransformWrapper
-           initialScale={1}
-           minScale={0.5}
-           maxScale={5}
-           wheel={{ step: 0.2 }}
-         >
-           {({ zoomIn, zoomOut, resetTransform }) => (
-             <div className="zoom-modal">
-               <div className="tools">
-                 <button onClick={zoomIn}>＋</button>
-                 <button onClick={zoomOut}>－</button>
-                 <button onClick={resetTransform}>⟳</button>
-                 <button onClick={() => setIsModalOpen(false)}>✕</button>
-               </div>
-               <TransformComponent>
-                 <img
-                   src={previewUrl}
-                   alt="Zoomed"
-                   style={{
-                     width: '100%',
-                     height: '100%',
-                     objectFit: 'contain'
-                   }}
-                 />
-               </TransformComponent>
-             </div>
-           )}
-         </TransformWrapper>
-       </Modal>
-     )}
-            {/* SUPER RESOLUCIÓN */}
-            <div className="image-container">
-              <div className="label">SUPER RESOLUCIÓN</div>
-              <div className="image-box">
-                {processing && <div className="spinner" />}
-                {!processing && resultImage && (
-                  <img src={resultImage} alt="Resultado SR" />
                 )}
               </div>
             </div>
+            {/* MODAL + ZOOM */}
+            {previewUrl && previewImageLoaded && (
+              <Modal
+                isOpen={isModalOpen}
+                onRequestClose={() => setIsModalOpen(false)}
+                className="zoom-modal-content"
+                overlayClassName="zoom-modal-overlay"
+              >
+                <TransformWrapper>
+                  {(utils) => (
+                    <div className="zoom-modal">
+                      <div className="tools">
+                        <button onClick={() => utils.zoomIn()}>＋</button>
+                        <button onClick={() => utils.zoomOut()}>－</button>
+                        <button onClick={() => utils.resetTransform()}>
+                          ⟳
+                        </button>
+                        <button onClick={() => setIsModalOpen(false)}>✕</button>
+                      </div>
+                      <TransformComponent>
+                        <img
+                          src={previewUrl}
+                          alt="Zoomed Original"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </TransformComponent>
+                    </div>
+                  )}
+                </TransformWrapper>
+              </Modal>
+            )}
+
+            {/* SUPER RESOLUCIÓN */}
+            <div className="image-container">
+              <div className="label">SUPER RESOLUCIÓN</div>
+              <div
+                className="image-box"
+                onClick={() => resultImage && setIsSRModalOpen(true)}
+                style={{ cursor: resultImage ? "zoom-in" : "default" }}
+              >
+                {processing && <div className="spinner" />}
+                {!processing && resultImage && (
+                  <img
+                    src={resultImage}
+                    alt="Resultado SR"
+                    onLoad={handleImageLoad}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* MODAL + ZOOM para SUPER RESOLUCIÓN */}
+            {resultImage && (
+              <Modal
+                isOpen={isSRModalOpen}
+                onRequestClose={() => setIsSRModalOpen(false)}
+                className="zoom-modal-content"
+                overlayClassName="zoom-modal-overlay"
+              >
+                <TransformWrapper>
+                  {({ zoomIn, zoomOut, resetTransform }) => (
+                    <div className="zoom-modal">
+                      <div className="tools">
+                        <button onClick={zoomIn}>＋</button>
+                        <button onClick={zoomOut}>－</button>
+                        <button onClick={resetTransform}>⟳</button>
+                        <button onClick={() => setIsSRModalOpen(false)}>
+                          ✕
+                        </button>
+                      </div>
+                      <TransformComponent>
+                        <img
+                          src={resultImage}
+                          alt="Resultado SR Ampliado"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </TransformComponent>
+                    </div>
+                  )}
+                </TransformWrapper>
+              </Modal>
+            )}
           </div>
         </section>
       </main>
 
       {/* FOOTER */}
       <div className="footer-accent">
-        <div className="classification">
-          CLASIFICACIÓN Y PRECISIÓN:
-        </div>
+        <div className="classification">CLASIFICACIÓN Y PRECISIÓN:</div>
         <div className="resultado">
           {classification ? (
             <>
-              <strong>{classification.class}</strong><br />
+              <strong>{classification.class}</strong>
+              <br />
               Precisión: {(classification.confidence * 100).toFixed(2)}%
             </>
           ) : (
