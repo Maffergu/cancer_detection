@@ -16,6 +16,9 @@ export default function App() {
   const [srImageLoaded, setSrImageLoaded] = useState(false);
   const [previewImageLoaded, setPreviewImageLoaded] = useState(false);
 
+  const [origDimensions, setOrigDimensions] = useState({ width: null, height: null });
+  const [srDimensions, setSrDimensions] = useState({ width: null, height: null });
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -151,9 +154,13 @@ export default function App() {
                   <img
                     src={previewUrl}
                     alt="Original Preview"
-                    onLoad={() => {
+                    onLoad={(e) => {
                       handleImageLoad();
                       setPreviewImageLoaded(true);
+                      setOrigDimensions({
+                        width: e.target.naturalWidth,
+                        height: e.target.naturalHeight
+                      });
                     }}
                   />
                 )}
@@ -208,27 +215,39 @@ export default function App() {
                   <img
                     src={resultImage}
                     alt="Resultado SR"
-                    onLoad={handleImageLoad}
+                    onLoad={(e) => {
+                      handleImageLoad();
+                      setSrImageLoaded(true);
+                      setSrDimensions({
+                        width: e.target.naturalWidth,
+                        height: e.target.naturalHeight
+                      });
+                    }}
                   />
                 )}
               </div>
             </div>
 
             {/* MODAL + ZOOM para SUPER RESOLUCIÓN */}
-            {resultImage && (
+            {resultImage && srImageLoaded && origDimensions.width && srDimensions.width && (
               <Modal
                 isOpen={isSRModalOpen}
                 onRequestClose={() => setIsSRModalOpen(false)}
                 className="zoom-modal-content"
                 overlayClassName="zoom-modal-overlay"
               >
-                <TransformWrapper>
+                <TransformWrapper
+                  initialScale={origDimensions.width && srDimensions.width ? origDimensions.width / srDimensions.width : 1}
+                  minScale={origDimensions.width && srDimensions.width ? origDimensions.width / srDimensions.width : 1}
+                  centerOnInit={true}
+                  wheel={{ disabled: false }}
+                >
                   {({ zoomIn, zoomOut, resetTransform }) => (
                     <div className="zoom-modal">
                       <div className="tools">
-                        <button onClick={zoomIn}>＋</button>
-                        <button onClick={zoomOut}>－</button>
-                        <button onClick={resetTransform}>⟳</button>
+                        <button onClick={() => zoomIn()}>＋</button>
+                        <button onClick={() => zoomOut()}>－</button>
+                        <button onClick={() => resetTransform()}>⟳</button>
                         <button onClick={() => setIsSRModalOpen(false)}>
                           ✕
                         </button>
