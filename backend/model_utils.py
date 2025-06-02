@@ -10,18 +10,21 @@ from torchvision import transforms
 from PIL import Image
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from skimage.metrics import structural_similarity as compare_ssim
+import torch.nn as nn
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Cargar el modelo una sola vez
 eff_model = EfficientNet.from_name('efficientnet-b0')
-eff_model._fc = torch.nn.Linear(eff_model._fc.in_features, 4)  # Cambia si son más clases
-eff_model.load_state_dict(torch.load('best_model_grid.pth', map_location=device))
+eff_model = EfficientNet.from_name('efficientnet-b0')
+eff_model._dropout = nn.Dropout(0.4)
+eff_model._fc = nn.Linear(eff_model._fc.in_features, 7)
+eff_model.load_state_dict(torch.load('best_model.pth', map_location=device))
 eff_model.to(device)
 eff_model.eval()
 
 # Clases
-classes = ['CIRC', 'NORM', 'MISC', 'ASYM']
+classes = ['ARCH', 'ASYM', 'CALC', 'CIRC', 'MISC', 'NORM', 'SPIC']
 
 # Transformación para clasificación
 transform = transforms.Compose([
